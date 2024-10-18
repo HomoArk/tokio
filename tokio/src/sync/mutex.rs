@@ -432,16 +432,17 @@ impl<T: ?Sized> Mutex<T> {
     /// }
     /// ```
     pub async fn lock(&self) -> MutexGuard<'_, T> {
+        log::trace!("before create acquire_fut");
         let acquire_fut = async {
             self.acquire().await;
-
+            log::trace!("Mutex acquired");
             MutexGuard {
                 lock: self,
                 #[cfg(all(tokio_unstable, feature = "tracing"))]
                 resource_span: self.resource_span.clone(),
             }
         };
-
+        log::trace!("acquire_fut created");
         #[cfg(all(tokio_unstable, feature = "tracing"))]
         let acquire_fut = trace::async_op(
             move || acquire_fut,
@@ -450,10 +451,10 @@ impl<T: ?Sized> Mutex<T> {
             "poll",
             false,
         );
-
+        log::trace!("before await acquire_fut");
         #[allow(clippy::let_and_return)] // this lint triggers when disabling tracing
         let guard = acquire_fut.await;
-
+        log::trace!("after await acquire_fut");
         #[cfg(all(tokio_unstable, feature = "tracing"))]
         self.resource_span.in_scope(|| {
             tracing::trace!(
@@ -461,7 +462,7 @@ impl<T: ?Sized> Mutex<T> {
                 locked = true,
             );
         });
-
+        log::trace!("MutexGuard created, should return");
         guard
     }
 
@@ -963,7 +964,7 @@ impl<'a, T: ?Sized> MutexGuard<'a, T> {
 impl<T: ?Sized> Drop for MutexGuard<'_, T> {
     fn drop(&mut self) {
         self.lock.s.release(1);
-
+        log::trace!("Mutex released");
         #[cfg(all(tokio_unstable, feature = "tracing"))]
         self.resource_span.in_scope(|| {
             tracing::trace!(
